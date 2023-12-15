@@ -5,10 +5,10 @@ from random import random
 from math import ceil
 from sklearn.cluster import KMeans
 import heapq
-
+import pickle
 # in this file we will implement a better version of VecDB
 # we have to use better indexing method to speed up the retrival process
-# we will use inverted file index
+# we will use FAISS to build index
 
 class vector:
     def __init__(self, id, vect) -> None:
@@ -55,10 +55,16 @@ class VecDBIF:
         # we will use the kmeans model to find the closest centroids
         # gen n centroids where n is a hyperparameter
         n = 2 # number of nearest centroids to get
+        ###########################################################################
+        # load the kmeans model from the pickle file
+        with open("test/old_kmeans.pickle", "rb") as fin:
+            self.kmeans = pickle.load(fin)
+        ###########################################################################
+        
         nearest_centroids = sorted(self.kmeans.cluster_centers_, key=lambda centroid: self._cal_score(query, centroid), reverse=True)[:n]
-        # now we need to get the label of each centroid
+        # # now we need to get the label of each centroid
         nearest_centroids = [self.kmeans.predict([centroid])[0] for centroid in nearest_centroids]
-        print("nearest_centroids", nearest_centroids)
+        print("nearest_centroids_kmeans", nearest_centroids)
 
         # now we need to search in the files of the nearest centroids
         # we will get the top k vectors from each file
@@ -91,7 +97,13 @@ class VecDBIF:
         for _ in range(top_k):
             score, id, vect = heapq.heappop(heap)
             ids_scores.append(id)
-
+        #################################################
+        # now we have the top k ids
+        # write them to a csv file
+        with open("test/old_ids.csv", "w") as fout:
+            for id in ids_scores:
+                fout.write(f"{id}\n")
+        #################################################
         return ids_scores
 
 
@@ -107,7 +119,7 @@ class VecDBIF:
         # now let's create the centroids on part of the vectors only to speed up the process
 
         # number of vectors to use to create the centroids
-        n_vectors_train = ceil(len(db_vectors) * 0.01)
+        n_vectors_train = ceil(len(db_vectors) * 0.5)
         
         num_centroids = ceil(n_vectors_train / self.num_vectors_per_cluster)
 
@@ -122,6 +134,8 @@ class VecDBIF:
         # now we need to assign each vector to the closest centroid
         self.centroids = self.kmeans.cluster_centers_
         clusters = {}
+        
+        print("self.centroids", self.centroids)
         # we can find the closest centroid by fit function
         for vec in db_vectors:
             centroid = self.kmeans.predict([vec.vect])[0]
@@ -136,6 +150,16 @@ class VecDBIF:
                     row_str = f"{vec.id}," + ",".join([str(e) for e in vec.vect])
                     fout.write(f"{row_str}\n")
 
+        ##################################################################################
+        # store the centroids in a csv file
+        with open("test/old_centroids.csv", "w") as fout:
+            for centroid in self.centroids:
+                row_str = ",".join([str(e) for e in centroid])
+                fout.write(f"{row_str}\n")
+        # save the kmeans model to a pickle file
+        with open("test/old_kmeans.pickle", "wb") as fout:
+            pickle.dump(self.kmeans, fout)
+            
         print("Done building index")
 
 
@@ -195,6 +219,5 @@ class VecDBIF:
                     fout.write(f"{row_str}\n")
 
         print("Done building index")
-
 
 
